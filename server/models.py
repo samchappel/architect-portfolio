@@ -5,6 +5,8 @@ from sqlalchemy.orm import validates
 from flask_login import UserMixin
 from config import bcrypt, db
 import re
+import random
+from datetime import datetime, timedelta
 
 class User(db.Model, UserMixin, SerializerMixin):
     __tablename__ = 'users'
@@ -15,6 +17,7 @@ class User(db.Model, UserMixin, SerializerMixin):
     first_name = db.Column(db.String)
     last_name = db.Column(db.String)
     access_code = db.Column(db.Integer)
+    access_code_expiration = db.Column(db.DateTime)
     admin = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, server_default=db.func.now())
 
@@ -28,9 +31,14 @@ class User(db.Model, UserMixin, SerializerMixin):
             password.encode('utf-8'))
         self._password_hash = password_hash.decode('utf-8')
 
-    def authenticate(self, password):
+    def authenticate_password(self, password):
         return bcrypt.check_password_hash(
             self._password_hash, password.encode('utf-8'))
+
+    def authenticate_access_code(self, access_code):
+        if self.access_code == access_code and self.access_code_expiration >= datetime.utcnow():
+            return True
+        return False
 
     # @validates('username')
     # def validate_username(self, key, username):
@@ -48,6 +56,17 @@ class User(db.Model, UserMixin, SerializerMixin):
         elif not re.search('[!@#$%^&*]', password):
             raise ValueError('Password must contain at least one special character.')
         return password
+
+    def generate_access_code(self):
+        access_code = random.randint(100000, 999999)
+        
+        expiration_date = datetime.utcnow() + timedelta(days=30)
+
+        # Set the access code and expiration date for the user
+        self.access_code = access_code
+        self.access_code_expiration = expiration_date
+
+        return access_code
 
 class PortfolioGrid(db.Model, SerializerMixin):
     __tablename__ = 'portfolio_grids'

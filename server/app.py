@@ -1,6 +1,6 @@
 from flask import request, make_response, session
 from flask_restful import Api, Resource
-from flask_login import current_user
+from flask_login import login_user
 from models import User, PortfolioGrid, ProjectDetail, db
 from config import app, api, bcrypt, login_manager
 from datetime import datetime
@@ -104,6 +104,63 @@ class ProjectDetails(Resource):
 
 
 api.add_resource(ProjectDetails, '/projectdetails')
+
+class Login(Resource):
+    def post(self):
+        try:
+            data = request.get_json()
+            username = data['username']
+            password = data['password']
+            access_code = data['access_code']
+
+            user = User.query.filter_by(username=username).first()
+
+            if user:
+                if user.authenticate(password):
+                    session['user_id'] = user.id
+                    response = make_response(user.to_dict(), 200)
+                    return response
+                else:
+                    abort(401, 'Incorrect Password')
+            else:
+                # Check access code validity
+                if user.authenticate_access_code(access_code):
+                    session['user_id'] = user.id
+                    response = make_response(user.to_dict(), 200)
+                    return response
+                else:
+                    abort(401, 'Invalid access code or expired')
+        except:
+            abort(401, 'Incorrect Username or Password')
+
+api.add_resource(Login, '/login')
+
+class AuthorizedSession(Resource):
+    def get(self):
+        try:
+            data = request.get_json()
+            access_code = data['access_code']
+
+            user = User.query.filter_by(id=session['user_id']).first()
+
+            if user.authenticate_access_code(access_code):
+                response = make_response(user.to_dict(), 200)
+                return response
+            else:
+                abort(401, 'Invalid access code or expired')
+        except:
+            abort(401, 'Unauthorized')
+
+api.add_resource(AuthorizedSession, '/authorized')
+
+
+class Logout(Resource):
+    def delete(self):
+        session['user_id'] = None
+        response = make_response('',204,)
+        return response
+
+api.add_resource(Logout, '/logout', endpoint='logout')
 
 
 if __name__ == '__main__':
